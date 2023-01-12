@@ -48,8 +48,9 @@ public class EmissionEventHandler implements BasicEventHandler {
                 Link link = network.getLinks().get(Id.create(linkId, Link.class));
                 // Get the link's coordinates
                 Node fromNode = link.getFromNode();
-                double x = fromNode.getCoord().getX();
-                double y = fromNode.getCoord().getY();
+                Node toNode = link.getToNode();
+                double x = (fromNode.getCoord().getX() + toNode.getCoord().getX())/2;
+                double y = (fromNode.getCoord().getY() + toNode.getCoord().getY())/2;
                 Integer xGrid = (int) Math.floor(x / 10);
                 Integer yGrid = (int) Math.floor(y / 10);
                 gridCell = new Tuple<>(xGrid, yGrid);
@@ -61,6 +62,7 @@ public class EmissionEventHandler implements BasicEventHandler {
             } else {
                 gridCell = linkToGrid.get(linkId);
             }
+            //TODO: If you want to add the spread of the elements, change me.
             // Get the time step from the event
             Integer timeStep = (int) Math.floor(event.getTime() / 3600);
             if (!grids.get(gridCell).containsKey(timeStep)) {

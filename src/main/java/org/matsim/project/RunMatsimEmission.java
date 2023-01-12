@@ -85,6 +85,7 @@ public class RunMatsimEmission {
             engineAttributes.putAttribute("HbefaTechnology", "average");
             engineAttributes.putAttribute("HbefaSizeClass", "average");
             engineAttributes.putAttribute("HbefaEmissionsConcept", "average");
+            //TODO: If want to add other vehicles types, change here
         }
 
         // change population to 5% of original
