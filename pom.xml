@@ -53,6 +53,11 @@
 
 	<dependencies>
 		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+			<version>20220924</version>
+		</dependency>
+		<dependency>
 			<!-- This is the matsim "core": -->
 			<groupId>org.matsim</groupId>
 			<artifactId>matsim</artifactId>
