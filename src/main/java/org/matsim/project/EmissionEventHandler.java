@@ -129,6 +129,38 @@ public class EmissionEventHandler implements BasicEventHandler {
         }
     }
 
+    private void evadeEmissions(int timeStep, int percent) {
+        try {
+            for (Tuple<Integer, Integer> gridCell : grids.keySet()) {
+                Map<Integer, Map<String, Double>> timeSteps = grids.get(gridCell);
+                if (timeSteps.containsKey(timeStep)) {
+                    Map<String, Double> emissions = timeSteps.get(timeStep);
+                    for (String emissionElement : emission_elements) {
+                        emissions.put(emissionElement, emissions.get(emissionElement) * (100 - percent) / 100);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+
+    private void unevadeEmissions(int timeStep, int percent) {
+        try {
+            for (Tuple<Integer, Integer> gridCell : grids.keySet()) {
+                Map<Integer, Map<String, Double>> timeSteps = grids.get(gridCell);
+                if (timeSteps.containsKey(timeStep)) {
+                    Map<String, Double> emissions = timeSteps.get(timeStep);
+                    for (String emissionElement : emission_elements) {
+                        emissions.put(emissionElement, emissions.get(emissionElement) * (100 + percent) / 100);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+
     @Override
     public void handleEvent(Event event) {
         // Check if the event is a cold or warm emission event
@@ -143,7 +175,9 @@ public class EmissionEventHandler implements BasicEventHandler {
 
             lock.lock();
             if (timeStep > currentStep) {
+                evadeEmissions(currentStep, 20);
                 dispereEmissions(currentStep);
+                unevadeEmissions(currentStep, 25);
                 currentStep = timeStep;
             }
             lock.unlock();
