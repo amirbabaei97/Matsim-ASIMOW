@@ -172,7 +172,7 @@ public class MergeTransitFiles {
 				MergeTransitFiles.mergeVehicles(baseTransitVehicles, folderName, tmpScenario.getTransitVehicles());
 			}
 		}
-
+		zipFile.close();
 		ptMerger.writeFiles(baseTransitSchedule, baseTransitVehicles);
 	}
 	
