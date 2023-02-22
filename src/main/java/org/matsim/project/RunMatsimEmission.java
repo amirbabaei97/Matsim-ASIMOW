@@ -107,10 +107,26 @@ public class RunMatsimEmission {
                 addEventHandlerBinding().toInstance(my_handler);
             }
         });
+
+        AgentTrackerHandler agentTrackerHandler = new AgentTrackerHandler(scenario);
+        controler.addOverridingModule(new AbstractModule() {
+            @Override
+            public void install() {
+                addEventHandlerBinding().toInstance(agentTrackerHandler);
+            }
+        });
+        // new NetworkMappingForEmission().run("network.xml.gz", "emission_net.xml.gz");
+        // Logger logger = Logger.getLogger(DefaultTurnAcceptanceLogic.class);
+        // Logger logger =
+        // LogManager.getLogger("org.matsim.core.mobsim.qsim.qnetsimengine.DefaultTurnAcceptanceLogic");
+        // logger.setLevel(Level.OFF);
+        // Logging.le
+
         controler.run();
         
         String outputDir = config.controler().getOutputDirectory();
         my_handler.writeToJson(outputDir + "/emissions.json");
+        agentTrackerHandler.writeToFile(outputDir + "/agentTracker.csv");
 
         // Config config = ConfigUtils.loadConfig("my_scenario/config_emission.xml", new
         // EmissionsConfigGroup());
