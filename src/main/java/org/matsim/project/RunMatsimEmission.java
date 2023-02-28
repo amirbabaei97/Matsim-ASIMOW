@@ -93,6 +93,9 @@ public class RunMatsimEmission {
 
         Controler controler = new Controler(scenario);
 
+        CalcScoreListener calcScoreListener = new CalcScoreListener(scenario, outputDir);
+        controler.addControlerListener(calcScoreListener);
+
         controler.addOverridingModule(new AbstractModule() {
             @Override
             public void install() {
