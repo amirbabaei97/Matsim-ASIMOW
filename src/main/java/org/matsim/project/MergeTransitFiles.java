@@ -129,7 +129,7 @@ public class MergeTransitFiles {
 
 		// instead of hardcoding the files get a zip file name from args
 		String zipFileName = args[0];
-		// String zipFileName = "D:/Downloads/all_schedules.zip";
+		// String zipFileName = "/home/relut/ASIMOW/Scripts/all_schedules.zip";
 		String outDir;
 		if (args.length > 1) {
 			outDir = args[1];

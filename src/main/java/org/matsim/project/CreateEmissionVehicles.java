@@ -135,6 +135,6 @@ public class CreateEmissionVehicles {
 
     public static void main(String[] args) {
         // new CreateEmissionVehicles().createEmissionVehicles("my_scenario/plans_3.xml.gz", "my_scenario/vehicles.xml.gz");
-        new CreateEmissionVehicles().createEmissionVehiclesAndTrafficAgents("my_scenario/plans_3.xml.gz", "my_scenario/traffic_plans.xml.gz", "my_scenario/merged_vehicles.xml.gz");
+        new CreateEmissionVehicles().createEmissionVehiclesAndTrafficAgents("my_scenario/plans_3.xml.gz", "/home/relut/ASIMOW/Scripts/traffic_plans.xml.gz", "my_scenario/merged_vehicles.xml.gz");
     }
 }

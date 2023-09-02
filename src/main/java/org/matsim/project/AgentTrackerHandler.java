@@ -1,230 +1,297 @@
-/* *********************************************************************** *
- * project: org.matsim.*
- * WarmEmissionHandler.java
- *                                                                         *
- * *********************************************************************** *
- *                                                                         *
- * copyright       : (C) 2009 by the members listed in the COPYING,        *
- *                   LICENSE and WARRANTY file.                            *
- * email           : info at matsim dot org                                *
- *                                                                         *
- * *********************************************************************** *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *   See also COPYING, LICENSE and WARRANTY file                           *
- *                                                                         *
- * *********************************************************************** */
 package org.matsim.project;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.matsim.api.core.v01.Scenario;
-import org.matsim.api.core.v01.population.Person;
-import org.matsim.api.core.v01.Id;
-import org.matsim.vehicles.Vehicle;
-import org.matsim.api.core.v01.network.Link;
-import org.matsim.api.core.v01.network.Node;
-import org.matsim.core.network.NetworkUtils;
 import org.matsim.api.core.v01.events.LinkEnterEvent;
 import org.matsim.api.core.v01.events.LinkLeaveEvent;
 import org.matsim.api.core.v01.events.PersonEntersVehicleEvent;
 import org.matsim.api.core.v01.events.PersonLeavesVehicleEvent;
 import org.matsim.api.core.v01.events.ActivityStartEvent;
 import org.matsim.api.core.v01.events.ActivityEndEvent;
-import org.matsim.api.core.v01.events.VehicleEntersTrafficEvent;
-import org.matsim.api.core.v01.events.VehicleLeavesTrafficEvent;
+// import org.matsim.api.core.v01.events.VehicleEntersTrafficEvent;
+// import org.matsim.api.core.v01.events.VehicleLeavesTrafficEvent;
+import org.matsim.api.core.v01.events.PersonDepartureEvent;
+import org.matsim.api.core.v01.events.PersonArrivalEvent;
+import org.matsim.vehicles.Vehicle;
+import org.matsim.api.core.v01.Id;
+import org.matsim.api.core.v01.network.Link;
+import org.matsim.api.core.v01.network.Network;
+import org.matsim.api.core.v01.Coord;
 import org.matsim.api.core.v01.events.handler.LinkEnterEventHandler;
 import org.matsim.api.core.v01.events.handler.LinkLeaveEventHandler;
 import org.matsim.api.core.v01.events.handler.PersonEntersVehicleEventHandler;
 import org.matsim.api.core.v01.events.handler.PersonLeavesVehicleEventHandler;
 import org.matsim.api.core.v01.events.handler.ActivityStartEventHandler;
 import org.matsim.api.core.v01.events.handler.ActivityEndEventHandler;
-import org.matsim.core.api.experimental.events.EventsManager;
-import org.matsim.core.config.ConfigUtils;
+import org.matsim.api.core.v01.events.handler.PersonDepartureEventHandler;
+import org.matsim.api.core.v01.events.handler.PersonArrivalEventHandler;
+import org.matsim.core.api.experimental.events.handler.TeleportationArrivalEventHandler;
 
-import org.matsim.core.utils.collections.Tuple;
-import org.matsim.facilities.ActivityFacility;
-import org.matsim.facilities.Facility;
+import org.matsim.api.core.v01.population.Person;
 
+import java.util.regex.Pattern;
+
+import java.util.function.DoubleFunction;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import java.io.FileWriter;
-import java.io.IOException;
+// Define a custom handler for LinkEnterEvent.
+class AgentTrackerEventHandler
+        implements LinkEnterEventHandler, LinkLeaveEventHandler, PersonEntersVehicleEventHandler,
+        PersonLeavesVehicleEventHandler, ActivityStartEventHandler, ActivityEndEventHandler,
+        PersonDepartureEventHandler, PersonArrivalEventHandler {
 
-// all events types:
-// array(['TransitDriverStarts', 'departure', 'PersonEntersVehicle',
-//        'vehicle enters traffic', 'VehicleArrivesAtFacility',
-//        'VehicleDepartsAtFacility', 'coldEmissionEvent', 'left link',
-//        'entered link', 'warmEmissionEvent', 'actend', 'stuckAndAbort',
-//        'vehicle leaves traffic', 'PersonLeavesVehicle', 'arrival',
-//        'actstart', 'travelled', 'waitingForPt', 'vehicle aborts'],
-//       dtype=object)
+    private final Network network;
+    private final Pattern[] ignorePatterns;
 
-// all events with person is not null:
-// array(['departure', 'PersonEntersVehicle', 'vehicle enters traffic',
-//        'actend', 'stuckAndAbort', 'vehicle leaves traffic',
-//        'PersonLeavesVehicle', 'arrival', 'actstart', 'travelled',
-//        'waitingForPt'], dtype=object)
-
-// all evnenst with vehicle is not null:
-// array(['PersonEntersVehicle', 'vehicle enters traffic',
-//        'VehicleArrivesAtFacility', 'VehicleDepartsAtFacility',
-//        'left link', 'entered link', 'vehicle leaves traffic',
-//        'PersonLeavesVehicle', 'vehicle aborts'], dtype=object)
-
-
-// events needed for agent tracker:
-// array(['PersonEntersVehicle', 'left link', 'entered link',
-//        'actend', 'PersonLeavesVehicle', 'actstart'],
-
-
-public class AgentTrackerHandler implements LinkEnterEventHandler, LinkLeaveEventHandler, PersonEntersVehicleEventHandler, PersonLeavesVehicleEventHandler, ActivityStartEventHandler, ActivityEndEventHandler {
-
-    private static final Logger log = LogManager.getLogger(AgentTrackerHandler.class);
-
-    // person to list of {link, {time,vehicle}}
-    private final Map<Id<Person>, List<Tuple<Id<Link>, Tuple<Double, String>>>> personToLinkTimeMap = new HashMap<>();
-    // vehicle to list of person
+    // vehicle to list of persons map
     private final Map<Id<Vehicle>, List<Id<Person>>> vehicleToPersonMap = new HashMap<>();
 
-    // Link to coords Tuple<int, int>
-    private final Map<Id<Link>, Tuple<Integer, Integer>> linkToCoordsMap = new HashMap<>();
+    // Link to LinkCoords map
+    private final Map<Id<Link>, LinkCoords> linkCoordsMap = new HashMap<>();
 
-    private final Scenario scenario;
+    // Person to list of PersonEvent map
+    public final Map<Id<Person>, List<PersonEvent>> personToEventMap = new HashMap<>();
 
-    public AgentTrackerHandler(Scenario scenario) {
-        this.scenario = scenario;
+    public AgentTrackerEventHandler(Network network, Pattern[] ignorePatterns) {
+        this.network = network;
+        this.ignorePatterns = ignorePatterns;
     }
 
-    // handle LinkEnterEvent
-    @Override
-    public void handleEvent(LinkEnterEvent event) {
-        Id<Vehicle> vehicleId = event.getVehicleId();
-        Id<Link> linkId = event.getLinkId();
-        double time = event.getTime();
-        String vehCat = "null";
-        try{
+    class LinkCoords {
+        public Coord from;
+        public Coord to;
+        public Coord mid;
 
-            vehCat = scenario.getVehicles().getVehicles().get(vehicleId).getType().getId().toString();
-        }
-        catch (NullPointerException e){
-            vehCat = scenario.getTransitVehicles().getVehicles().get(vehicleId).getType().getId().toString();
-        }
-
-        for (Id<Person> personId : vehicleToPersonMap.get(vehicleId)) {
-            personToLinkTimeMap.get(personId).add(new Tuple<>(linkId, new Tuple<>(time, vehCat)));
+        public LinkCoords(Coord from, Coord to) {
+            this.from = from;
+            this.to = to;
+            this.mid = new Coord((from.getX() + to.getX()) / 2, (from.getY() + to.getY()) / 2);
         }
     }
 
-    // handle LinkLeaveEvent
-    @Override
-    public void handleEvent(LinkLeaveEvent event) {
-        return;
-    }
+    class PersonEvent {
+        public String type;
+        public Id<Vehicle> vehicleId;
+        public Id<Link> linkId;
+        public Coord coord;
+        public double time;
+        public String xFunction;
+        public String yFunction;
 
-    // handle PersonEntersVehicleEvent
-    @Override
-    public void handleEvent(PersonEntersVehicleEvent event) {
-        Id<Vehicle> vehicleId = event.getVehicleId();
-        if (!vehicleToPersonMap.containsKey(vehicleId)) {
-            vehicleToPersonMap.put(vehicleId, new ArrayList<>());
-        }
-
-        Id<Person> personId = event.getPersonId();
-        // ignore if starts with pt_
-        if (personId.toString().startsWith("pt_")) {
-            return;
-        }
-        if (!personToLinkTimeMap.containsKey(personId)) {
-            personToLinkTimeMap.put(personId, new ArrayList<>());
-        }
-        vehicleToPersonMap.get(vehicleId).add(personId);
-    }
-
-    // handle PersonLeavesVehicleEvent
-    @Override
-    public void handleEvent(PersonLeavesVehicleEvent event) {
-        Id<Person> personId = event.getPersonId();
-        if (personId.toString().startsWith("pt_")) {
-            return;
-        }
-        
-        Id<Vehicle> vehicleId = event.getVehicleId();
-        if (vehicleToPersonMap.containsKey(vehicleId)) {
-            vehicleToPersonMap.get(vehicleId).remove(personId);
+        public PersonEvent(String type, Id<Vehicle> vehicleId, Id<Link> linkId, Coord coord,
+                double time, String xFunction, String yFunction) {
+            this.type = type;
+            this.vehicleId = vehicleId;
+            this.linkId = linkId;
+            this.coord = coord;
+            this.time = time;
+            this.xFunction = xFunction;
+            this.yFunction = yFunction;
         }
     }
 
-    // handle ActivityStartEvent
-    @Override
-    public void handleEvent(ActivityStartEvent event) {
-        Id<Person> personId = event.getPersonId();
-        Id<Link> linkId = event.getLinkId();
-        // Id<ActivityFacility> facilityId = event.getFacilityId();
-        double time = event.getTime();
-        if (!personToLinkTimeMap.containsKey(personId)) {
-            personToLinkTimeMap.put(personId, new ArrayList<>());
+    private boolean shouldIgnorePerson(String personId) {
+        for (Pattern pattern : ignorePatterns) {
+            if (pattern.matcher(personId).matches()) {
+                return true;
+            }
         }
-        personToLinkTimeMap.get(personId).add(new Tuple<>(linkId, new Tuple<>(time, "null")));
+        return false;
     }
 
-    // handle ActivityEndEvent
-    @Override
-    public void handleEvent(ActivityEndEvent event) {
-        return;
+    public static DoubleFunction<Coord> getPositionFunction(Coord fromCoord, Coord toCoord, double t) {
+        return (double tPrime) -> {
+            if (tPrime < 0 || tPrime > t) {
+                throw new IllegalArgumentException("t' must be in the range [0, t]");
+            }
+
+            double progress = tPrime / t;
+
+            double newX = fromCoord.getX() + progress * (toCoord.getX() - fromCoord.getX());
+            double newY = fromCoord.getY() + progress * (toCoord.getY() - fromCoord.getY());
+
+            return new Coord(newX, newY);
+        };
+    }
+
+    public static String getPositionEquation(Coord fromCoord, Coord toCoord, double t) {
+        StringBuilder equation = new StringBuilder();
+        equation.append("x = ").append((int) fromCoord.getX()).append(" + (t / ").append(t).append(") * (")
+                .append((int) (toCoord.getX() - fromCoord.getX())).append(")\n");
+        equation.append("y = ").append((int) fromCoord.getY()).append(" + (t / ").append(t).append(") * (")
+                .append((int) (toCoord.getY() - fromCoord.getY())).append(")\n");
+        return equation.toString();
+    }
+
+    public LinkCoords getLinkCoords(Id<Link> linkId) {
+        if (!linkCoordsMap.containsKey(linkId)) {
+            Link link = network.getLinks().get(linkId);
+            linkCoordsMap.put(linkId, new LinkCoords(link.getFromNode().getCoord(), link.getToNode().getCoord()));
+        }
+        return linkCoordsMap.get(linkId);
     }
 
     @Override
     public void reset(int iteration) {
-        personToLinkTimeMap.clear();
-        vehicleToPersonMap.clear();
+        System.out.println("Resetting...");
     }
 
-    public Map<Id<Person>, List<Tuple<Id<Link>, Tuple<Double, String>>>> getPersonToLinkTimeMap() {
-        return personToLinkTimeMap;
+    @Override
+    public void handleEvent(LinkEnterEvent event) {
+        Id<Vehicle> vehicleId = event.getVehicleId();
+        // check if vehicleToPersonMap contains vehicleId and it is not empty
+        if (!vehicleToPersonMap.containsKey(vehicleId) || vehicleToPersonMap.get(vehicleId).isEmpty()) {
+            return;
+        }
+        List<Id<Person>> personIds = vehicleToPersonMap.get(vehicleId);
+        Id<Link> linkId = event.getLinkId();
+        Coord coord = getLinkCoords(linkId).from;
+        double time = event.getTime();
+        for (Id<Person> personId : personIds) {
+            PersonEvent personEvent = new PersonEvent(event.getEventType(), vehicleId, linkId, coord, time, "", "");
+            personToEventMap.get(personId).add(personEvent);
+        }
     }
 
-    public Map<Id<Vehicle>, List<Id<Person>>> getVehicleToPersonMap() {
-        return vehicleToPersonMap;
+    @Override
+    public void handleEvent(LinkLeaveEvent event) {
+        Id<Vehicle> vehicleId = event.getVehicleId();
+        // check if vehicleToPersonMap contains vehicleId and it is not empty
+        if (!vehicleToPersonMap.containsKey(vehicleId) || vehicleToPersonMap.get(vehicleId).isEmpty()) {
+            return;
+        }
+        List<Id<Person>> personIds = vehicleToPersonMap.get(vehicleId);
+        Id<Link> linkId = event.getLinkId();
+        Coord coord = getLinkCoords(linkId).to;
+        double time = event.getTime();
+        for (Id<Person> personId : personIds) {
+            PersonEvent lastPersonEvent = personToEventMap.get(personId)
+                    .get(personToEventMap.get(personId).size() - 1);
+            // if type is not LinkEnterEvent, then ignore
+            if (!lastPersonEvent.type.equals("entered link")) {
+                continue;
+            }
+            String xyFunction = getPositionEquation(lastPersonEvent.coord, coord, time - lastPersonEvent.time);
+            String xFunction = xyFunction.split("\n")[0];
+            String yFunction = xyFunction.split("\n")[1];
+            lastPersonEvent.xFunction = xFunction;
+            lastPersonEvent.yFunction = yFunction;
+        }
     }
 
-    // write to csv
-    public void writeToFile(String fileName) {
-        try {
-            FileWriter writer = new FileWriter(fileName);
-            writer.append("personId,linkId,time,coords,tile,vehicle");
-            for (Id<Person> personId : personToLinkTimeMap.keySet()) {
-                for (Tuple<Id<Link>, Tuple<Double, String>> linkTime : personToLinkTimeMap.get(personId)) {
-                    Id<Link> linkId = linkTime.getFirst();
-                    if (!linkToCoordsMap.containsKey(linkId)) {
-                        Node fromNode = scenario.getNetwork().getLinks().get(linkId).getFromNode();
-                        Node toNode = scenario.getNetwork().getLinks().get(linkId).getToNode();
-                        int x = (int) (fromNode.getCoord().getX() + toNode.getCoord().getX()) / 2;
-                        int y = (int) (fromNode.getCoord().getY() + toNode.getCoord().getY()) / 2;
-                        linkToCoordsMap.put(linkId, new Tuple<>(x, y));
-                    }
-                    Tuple<Integer, Integer> coords = linkToCoordsMap.get(linkId);
-                    Tuple<Integer, Integer> tile = new Tuple<>(coords.getFirst() / 10, coords.getSecond() / 10);
-                    String coordsStr = coords.getFirst() + ";" + coords.getSecond();
-                    String tileStr = tile.getFirst() + ";" + tile.getSecond();
-                    String time = linkTime.getSecond().getFirst().toString();
-                    String vehicle = linkTime.getSecond().getSecond();
-                    writer.append(String.format("%n%s,%s,%s,%s,%s,%s", personId, linkId, time, coordsStr, tileStr, vehicle));
-                    
+    @Override
+    public void handleEvent(PersonEntersVehicleEvent event) {
+        if (shouldIgnorePerson(event.getPersonId().toString())) {
+            return;
+        }
+        Id<Vehicle> vehicleId = event.getVehicleId();
+        Id<Person> personId = event.getPersonId();
+        if (!vehicleToPersonMap.containsKey(vehicleId)) {
+            vehicleToPersonMap.put(vehicleId, new ArrayList<>());
+        }
+        vehicleToPersonMap.get(vehicleId).add(personId);
+        if (!personToEventMap.containsKey(personId)) {
+            personToEventMap.put(personId, new ArrayList<>());
+        }
+    }
+
+    @Override
+    public void handleEvent(PersonLeavesVehicleEvent event) {
+        if (shouldIgnorePerson(event.getPersonId().toString())) {
+            return;
+        }
+        Id<Vehicle> vehicleId = event.getVehicleId();
+        Id<Person> personId = event.getPersonId();
+        if (!vehicleToPersonMap.containsKey(vehicleId)) {
+            return;
+        }
+        vehicleToPersonMap.get(vehicleId).remove(personId);
+    }
+
+    @Override
+    public void handleEvent(ActivityStartEvent event) {
+        return;
+    }
+
+    @Override
+    public void handleEvent(ActivityEndEvent event) {
+        if (shouldIgnorePerson(event.getPersonId().toString())) {
+            return;
+        }
+        Id<Person> personId = event.getPersonId();
+        double lastTime = 0;
+        if (!personToEventMap.containsKey(personId)) {
+            personToEventMap.put(personId, new ArrayList<>());
+        } else {
+            lastTime = personToEventMap.get(personId).get(personToEventMap.get(personId).size() - 1).time;
+        }
+        Id<Link> linkId = event.getLinkId();
+        Coord coord = getLinkCoords(linkId).mid;
+        double time = event.getTime();
+        String xFunction = new StringBuilder().append((int) coord.getX()).append(" + (t * 0)").toString();
+        String yFunction = new StringBuilder().append((int) coord.getY()).append(" + (t * 0)").toString();
+        PersonEvent personEvent = new PersonEvent(event.getActType(), null, linkId, coord, time, xFunction,
+                yFunction);
+        personToEventMap.get(personId).add(personEvent);
+    }
+
+    @Override
+    public void handleEvent(PersonDepartureEvent event) {
+        if (!event.getLegMode().equals("walk")) {
+            return;
+        }
+        if (shouldIgnorePerson(event.getPersonId().toString())) {
+            return;
+        }
+        Id<Link> linkId = event.getLinkId();
+        Coord coord = getLinkCoords(linkId).mid;
+        double time = event.getTime();
+        PersonEvent personEvent = new PersonEvent(event.getEventType(), null, linkId, coord, time, "", "");
+        personToEventMap.get(event.getPersonId()).add(personEvent);
+    }
+
+    @Override
+    public void handleEvent(PersonArrivalEvent event) {
+        if (!event.getLegMode().equals("walk")) {
+            return;
+        }
+        if (shouldIgnorePerson(event.getPersonId().toString())) {
+            return;
+        }
+        PersonEvent lastPersonEvent = personToEventMap.get(event.getPersonId())
+                .get(personToEventMap.get(event.getPersonId()).size() - 1);
+        // if type is not PersonDepartureEvent, then ignore
+        if (!lastPersonEvent.type.equals("departure")) {
+            return;
+        }
+        Id<Link> linkId = event.getLinkId();
+        Coord coord = getLinkCoords(linkId).mid;
+        double time = event.getTime();
+        String xyFunction = getPositionEquation(lastPersonEvent.coord, coord, time - lastPersonEvent.time);
+        String xFunction = xyFunction.split("\n")[0];
+        String yFunction = xyFunction.split("\n")[1];
+        lastPersonEvent.xFunction = xFunction;
+        lastPersonEvent.yFunction = yFunction;
+    }
+
+    public void saveToCSV(String filePath) {
+        try (FileWriter csvWriter = new FileWriter(filePath)) {
+            csvWriter.write("personId,type,vehicleId,linkId,coord,time,xFunction,yFunction\n");
+            for (Map.Entry<Id<Person>, List<PersonEvent>> entry : personToEventMap.entrySet()) {
+                Id<Person> personId = entry.getKey();
+                for (PersonEvent personEvent : entry.getValue()) {
+                    csvWriter.write(String.format("%s,%s,%s,%s,%s,%s,%s,%s\n",
+                            personId, personEvent.type,
+                            personEvent.vehicleId == null ? "" : personEvent.vehicleId,
+                            personEvent.linkId, personEvent.coord, personEvent.time,
+                            personEvent.xFunction, personEvent.yFunction));
                 }
             }
-            writer.flush();
-            writer.close();
         } catch (IOException e) {
-            System.out.println("Error writing to file: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }
-
