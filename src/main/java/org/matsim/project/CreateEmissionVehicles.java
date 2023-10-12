@@ -50,10 +50,11 @@ public class CreateEmissionVehicles {
         Random r = new Random(123456);
         for (Person person : scenario.getPopulation().getPersons().values()) {
             VehicleType vehType = avgCarType;
+            // uncomment to make a fraction of cars petrol (4S)
             // randomly assign vehicle types in this example
-            if (r.nextDouble() < 0.5) {
-                vehType = petrolCarType;
-            }
+            // if (r.nextDouble() < 0.5) {
+            //     vehType = petrolCarType;
+            // }
             Vehicle vehicle = factory.createVehicle(Id.create(person.getId().toString(), Vehicle.class), vehType);
             vehicles.addVehicle(vehicle);
         }
